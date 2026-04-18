@@ -1,0 +1,189 @@
+@import "../../dist/app.css";
+
+/* ============================================================================
+   🚀 PEKTOWN — Sci-Fi Theme Layer
+   "The future called. It said your dashboard looks boring." — fixed it.
+   ============================================================================ */
+
+/* 🔤 Base font — Inter, matching the clean CloudPE SaaS aesthetic */
+body, #app {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* 🌌 Sci-fi glow effects */
+.glow-border {
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.08), inset 0 0 15px rgba(56, 189, 248, 0.03);
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.glow-border:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 25px rgba(56, 189, 248, 0.15), inset 0 0 25px rgba(56, 189, 248, 0.05);
+}
+
+/* ⚡ Cyan accent glow for buttons */
+.glow-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+.glow-btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(circle at center, rgba(56, 189, 248, 0.15), transparent 70%);
+  transition: opacity 0.3s ease;
+}
+.glow-btn:hover::after {
+  opacity: 1;
+}
+
+/* 🎨 Gradient text for the brand name */
+.brand-gradient {
+  font-family: 'Inter', sans-serif;
+  font-weight: 800;
+  color: #94a3b8;
+}
+
+/* 🐦 Branding block — icon + name, both 48px tall (80px reduced by 40%) */
+.brand-block {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 0px;
+}
+
+/* 🐦 Woodpecker icon — 48px, glowing cyan body, orange beak */
+.brand-icon {
+  flex-shrink: 0;
+  color: rgba(148, 163, 184, 0.85);
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.3));
+}
+.brand-icon .brand-icon-svg {
+  width: 80px;
+  height: 80px;
+}
+
+/* 🌱 Empty state icon — slightly larger for visual weight */
+.empty-state-icon {
+  color: rgba(148, 163, 184, 0.85);
+}
+.empty-state-icon .brand-icon-svg {
+  width: 64px;
+  height: 64px;
+}
+
+/* 🏷️ Brand name — 48px line height, matching the icon */
+.brand-name {
+  font-family: 'Inter', sans-serif;
+  font-weight: 800;
+  font-size: 32px;
+  line-height: 48px;
+  letter-spacing: -0.02em;
+}
+
+/* 📊 Table sci-fi styling */
+.sci-fi-table thead tr {
+  background: linear-gradient(90deg, rgba(56, 189, 248, 0.05), transparent, rgba(129, 140, 248, 0.05));
+}
+.sci-fi-table tbody tr {
+  transition: all 0.2s ease;
+}
+.sci-fi-table tbody tr:hover {
+  background: rgba(56, 189, 248, 0.06) !important;
+  box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.5);
+}
+
+/* 📏 Consistent row height — matches form field height (~40px content) */
+.sci-fi-table td {
+  height: 48px;
+  vertical-align: middle;
+}
+
+/* 📐 Current Run + Total Hours columns — width fits content, no extra stretch */
+.sci-fi-table th.col-hours,
+.sci-fi-table td.col-hours {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* 🌊 Subtle animated scanline effect on the page background */
+.scanlines::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(56, 189, 248, 0.015) 2px,
+    rgba(56, 189, 248, 0.015) 4px
+  );
+  z-index: 9999;
+}
+
+/* 💫 Status dot pulse animation for running containers */
+.pulse-dot {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 4px rgba(74, 222, 128, 0.4); }
+  50% { box-shadow: 0 0 12px rgba(74, 222, 128, 0.8); }
+}
+
+/* 🔙 Back button hover effect */
+.back-btn {
+  transition: all 0.2s ease;
+}
+.back-btn:hover {
+  transform: translateX(-3px);
+  color: #38bdf8;
+}
+
+/* 🏷️ Form labels — uppercase tracked, inline layout */
+.sci-fi-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(148, 163, 184, 0.8);
+  font-family: 'Inter', sans-serif;
+}
+
+/* 📝 Inline form row — label on the left, field on the right */
+.form-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+.form-row:first-child {
+  margin-top: 0;
+}
+.form-row .form-label {
+  width: 180px;
+  flex-shrink: 0;
+  text-align: right;
+}
+.form-row .form-field {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ✨ Page-level entrance animation */
+.fade-in {
+  animation: fadeSlideIn 0.4s ease-out;
+}
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 🌈 Horizontal rule with gradient */
+.sci-fi-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.3), rgba(129, 140, 248, 0.3), transparent);
+  border: none;
+}
