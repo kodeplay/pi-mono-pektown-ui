@@ -84,11 +84,19 @@ body, #app {
 }
 
 /* 📊 Table sci-fi styling */
+.sci-fi-table {
+  border-collapse: collapse;
+}
 .sci-fi-table thead tr {
   background: linear-gradient(90deg, rgba(56, 189, 248, 0.05), transparent, rgba(129, 140, 248, 0.05));
 }
 .sci-fi-table tbody tr {
+  /* 🤍 Clear row boundary: easier to scan where one agent ends and the next begins. */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.45) !important;
   transition: all 0.2s ease;
+}
+.sci-fi-table tbody tr:last-child {
+  border-bottom: 0 !important;
 }
 .sci-fi-table tbody tr:hover {
   background: rgba(56, 189, 248, 0.06) !important;
