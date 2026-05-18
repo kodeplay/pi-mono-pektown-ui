@@ -568,6 +568,28 @@ const loadSavedUser = (): void => {
 // render shows a plain "Sign in with Google" button (not a personalized one
 // with the user's email baked in). revoke() is async but we don't need to
 // wait on it; best-effort is fine.
+// 🚦 Before opening flows that will definitely call the API (Create Agent,
+// Create from Backup), make sure the cached Google JWT is still fresh. This
+// avoids the confusing UX where the form opens, the user fills it out, and
+// only then pektown-api says “nope, that token expired 20 minutes ago.” If the
+// credential is missing/expired, drop them straight back on the login page.
+const ensureActiveGoogleSession = (): boolean => {
+	const credential = localStorage.getItem(GOOGLE_CREDENTIAL_KEY);
+	const decoded = credential ? decodeJwt(credential) : null;
+	if (!decoded?.exp || decoded.exp * 1000 <= Date.now() + EXPIRY_SAFETY_MS) {
+		signedInUser = null;
+		currentView = "dashboard";
+		localStorage.removeItem(GOOGLE_USER_KEY);
+		localStorage.removeItem(GOOGLE_CREDENTIAL_KEY);
+		renderApp();
+		return false;
+	}
+	// 🪪 Keep the in-memory/user cache aligned if GIS gave us a newer token.
+	signedInUser = decoded;
+	localStorage.setItem(GOOGLE_USER_KEY, JSON.stringify(decoded));
+	return true;
+};
+
 const signOut = (): void => {
 	const email = signedInUser?.email;
 	signedInUser = null;
@@ -659,6 +681,7 @@ let backupNewAgentName = "";
 let backupImportError: string | null = null;
 let backupImportResult: BackupRestoreResult | null = null;
 let isImportingBackup = false;
+let dashboardSuccessMessage: string | null = null;
 let deletingContainer: Container | null = null;
 let deleteConfirmText = "";
 let isDeletingContainer = false;
@@ -981,11 +1004,13 @@ const renderRow = (c: Container) => {
 				})}
 			</td>
 
-			<!-- ⏱️ Current run hours (dash if stopped — container is in cryo-sleep 🧊) -->
-			<td class="px-4 tabular-nums font-mono text-sm col-hours">${isRunning ? formatHours(c.currentRunHours) : "—"}</td>
-
-			<!-- 📈 Total hours across all runs -->
-			<td class="px-4 tabular-nums font-mono text-sm col-hours">${formatHours(c.totalHours)}</td>
+			<!-- 📊 Usage — current run + lifetime total in one compact column.
+			     Stacking them keeps the table narrow without hiding the two numbers
+			     operators care about when eyeballing spend. 💸 -->
+			<td class="px-4 tabular-nums font-mono text-sm col-hours">
+				<div>${isRunning || isStarting ? formatHours(c.currentRunHours) : "—"} <span class="text-xs opacity-60">(current run)</span></div>
+				<div class="mt-0.5">${formatHours(c.totalHours)} <span class="text-xs opacity-60">(total usage)</span></div>
+			</td>
 
 			<!-- 🎮 Action buttons — Start/Stop + ✏️ Edit side by side. Edit
 			     is disabled when the container isn't running, because the
@@ -1247,7 +1272,7 @@ const renderTable = () => html`
 		${containers.map(renderCard)}
 	</div>
 
-	<!-- 💻 Desktop: five-column table.
+	<!-- 💻 Desktop: four-column table.
 	     📐 We wrap the table in a div toggler instead of applying
 	     hidden/sm:table directly on the table itself. Reason: relying on
 	     Tailwind to flip a table element display between none and table
@@ -1260,8 +1285,7 @@ const renderTable = () => html`
 				<tr class="border-b border-border/50 text-left">
 					<th class="px-4 py-3 sci-fi-label">Agent</th>
 					<th class="px-4 py-3 sci-fi-label">Status</th>
-					<th class="px-4 py-3 sci-fi-label col-hours">Current Run</th>
-					<th class="px-4 py-3 sci-fi-label col-hours">Total Hours</th>
+					<th class="px-4 py-3 sci-fi-label col-hours">Usage Hours</th>
 					<th class="px-4 py-3 sci-fi-label">Actions</th>
 				</tr>
 			</thead>
@@ -1285,6 +1309,12 @@ const renderLoadingState = () => html`
 
 const renderDashboard = () => html`
 	<div class="fade-in">
+		${dashboardSuccessMessage ? html`
+			<div class="mb-4 rounded-md border border-green-500/30 bg-green-500/10 p-4 text-sm text-green-300 flex items-start justify-between gap-3">
+				<div>${dashboardSuccessMessage}</div>
+				<button class="text-green-300/70 hover:text-green-200" @click=${() => { dashboardSuccessMessage = null; renderApp(); }}>✕</button>
+			</div>
+		` : ""}
 		<!-- 🏠 Section header — refresh + create button -->
 		<div class="flex items-center justify-end gap-2 mb-4">
 			<!-- 🔄 Manual refresh — handy while debugging, also re-fetches after actions -->
@@ -1300,6 +1330,7 @@ const renderDashboard = () => html`
 				className: "glow-btn",
 				children: html`<span class="flex items-center gap-1.5">${icon(Upload, "sm")} Create from Backup</span>`,
 				onClick: () => {
+					if (!ensureActiveGoogleSession()) return;
 					selectedBackupFile = null;
 					backupNewAgentName = "";
 					backupImportError = null;
@@ -1317,6 +1348,7 @@ const renderDashboard = () => html`
 				// "Loading models…" button for freshly signed-in friends. 👻
 				children: html`<span class="flex items-center gap-1.5">${icon(Plus, "sm")} Create Agent</span>`,
 				onClick: () => {
+					if (!ensureActiveGoogleSession()) return;
 					if (aiModels.length === 0) void loadAiModels();
 					currentView = "create";
 					renderApp();
@@ -1653,9 +1685,48 @@ const startWaPolling = () => {
 	}, 3000);
 };
 
+const disconnectOtherWhatsappAgentBeforeConnecting = async (target: Container): Promise<boolean> => {
+	// 📵 Product rule: one WhatsApp account ↔ one active agent. Before starting
+	// a new QR flow, do a fresh status sweep and warn the user if another agent
+	// is currently linked. If they agree, disconnect the old one first so the new
+	// link doesn't fight a cloned/live Baileys session. Calm UX, fewer ghosts. 👻
+	await Promise.all(containers.map(async (candidate) => {
+		try { waStatusByContainer.set(candidate.containerName, await fetchWhatsappStatus(candidate.containerName)); }
+		catch { /* keep any last-known value */ }
+	}));
+	const targetStatus = waStatusByContainer.get(target.containerName);
+	if (targetStatus?.connected) return true;
+
+	const existing = containers.find((candidate) =>
+		candidate.containerName !== target.containerName &&
+		waStatusByContainer.get(candidate.containerName)?.connected === true,
+	);
+	if (!existing) return true;
+
+	const ok = window.confirm(
+		`WhatsApp is already connected to ${existing.agentName}.\n\n` +
+		`To connect WhatsApp to ${target.agentName}, the existing WhatsApp connection of ${existing.agentName} will be disconnected.\n\n` +
+		`Continue?`,
+	);
+	if (!ok) return false;
+
+	waStatusByContainer.set(existing.containerName, { connected: false });
+	renderApp();
+	try {
+		await whatsappLogout(existing.containerName);
+		waStatusByContainer.set(existing.containerName, { connected: false });
+		return true;
+	} catch (err) {
+		showErrorToast(`Couldn't disconnect WhatsApp from ${existing.agentName}: ${(err as Error).message}`);
+		try { waStatusByContainer.set(existing.containerName, await fetchWhatsappStatus(existing.containerName)); } catch {}
+		return false;
+	}
+};
+
 // 🎯 Open the Connect-WhatsApp screen for a container. Resets state, fetches
 // status, kicks off the helper if not already connected, starts polling.
 const openConnectWhatsappView = async (c: Container): Promise<void> => {
+	if (!(await disconnectOtherWhatsappAgentBeforeConnecting(c))) return;
 	connectWhatsappContainer = { containerName: c.containerName, agentName: c.agentName };
 	waState = null;
 	waInFlight = null;
@@ -1989,7 +2060,7 @@ const renderCreateView = () => {
 				<hr class="sci-fi-divider mt-8 mb-2" />
 				${!isEdit ? html`
 					<div class="mt-4 px-4 py-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-sm text-emerald-500">
-						🧠 New agents use PekTown OpenCode Go by default. You can change provider/model or paste your own key later from Edit.
+						🧠 New agents use OpenCode Go by default. You can change provider/model or paste your own key later from Edit.
 					</div>
 				` : html`
 
@@ -2187,7 +2258,10 @@ const renderImportBackupView = () => html`
 				${Input({
 					value: backupNewAgentName,
 					placeholder: "support-copy",
-					onInput: (e: Event) => { backupNewAgentName = (e.target as HTMLInputElement).value; },
+					// 🔓 The submit button's disabled state depends on this value, so
+					// re-render as the user types. Without this, the variable updates but
+					// the button stays visually disabled until some unrelated render happens.
+					onInput: (e: Event) => { backupNewAgentName = (e.target as HTMLInputElement).value; renderApp(); },
 				})}
 			</div>
 			${backupImportError ? html`<div class="text-sm text-red-500">⚠️ ${backupImportError}</div>` : ""}
@@ -2214,6 +2288,11 @@ const renderImportBackupView = () => html`
 						renderApp();
 						try {
 							backupImportResult = await importBackupAsAgent(selectedBackupFile, backupNewAgentName.trim());
+							const readyAgentName = backupImportResult.customer || backupNewAgentName.trim();
+							dashboardSuccessMessage = `✅ ${readyAgentName} is ready`;
+							selectedBackupFile = null;
+							backupNewAgentName = "";
+							currentView = "dashboard";
 							await loadContainers();
 						} catch (err) {
 							backupImportError = (err as Error).message;
